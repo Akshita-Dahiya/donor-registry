@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Donor Match Registry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f4f6f8; --panel:#ffffff; --ink:#14212b; --muted:#5c6b78; --line:#d9e0e6;
+    --brand:#0f4c5c; --brand-ink:#ffffff; --blood:#b3202a; --ok:#1f7a4d; --warn:#b26a00;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Public Sans",system-ui,sans-serif}
+  header{background:var(--brand);color:var(--brand-ink);padding:20px 24px 0}
+  header h1{margin:0 0 2px;font-size:22px;font-weight:700}
+  header p{margin:0 0 16px;opacity:.8;font-size:14px}
+  .stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+  .stat{background:rgba(255,255,255,.12);border-radius:6px;padding:6px 12px;font-size:13px}
+  .stat b{font-size:17px;margin-right:4px}
+  nav{display:flex;gap:4px;flex-wrap:wrap}
+  nav button{background:transparent;border:0;color:#cfe3e8;padding:10px 16px;font:inherit;font-weight:500;cursor:pointer;border-radius:6px 6px 0 0}
+  nav button.on{background:var(--bg);color:var(--ink)}
+  nav button:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #7cc4d4;outline-offset:1px}
+  main{max-width:1000px;margin:0 auto;padding:24px}
+  section{display:none} section.on{display:block}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:20px;margin-bottom:20px}
+  h2{margin:0 0 4px;font-size:18px} .hint{color:var(--muted);margin:0 0 16px;font-size:14px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  label{display:flex;flex-direction:column;font-size:13px;font-weight:600;gap:4px;min-width:150px;flex:1}
+  input,select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#fff}
+  button.btn{background:var(--brand);color:#fff;border:0;border-radius:6px;padding:9px 16px;font:inherit;font-weight:600;cursor:pointer}
+  button.btn.ghost{background:#fff;color:var(--brand);border:1px solid var(--brand)}
+  button.btn.danger{background:#fff;color:var(--blood);border:1px solid var(--blood)}
+  button.btn:disabled{opacity:.5;cursor:not-allowed}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+  th{font-size:12px;color:var(--muted);font-weight:600}
+  .wrap{overflow-x:auto}
+  .tag{display:inline-block;padding:1px 9px;border-radius:99px;font-size:12px;font-weight:600;background:#e8edf1;color:var(--ink)}
+  .tag.critical{background:#fbe3e5;color:var(--blood)} .tag.high{background:#fdeed6;color:var(--warn)}
+  .tag.available,.tag.waiting{background:#e3f1ea;color:var(--ok)}
+  .tag.locked,.tag.matched{background:#fdeed6;color:var(--warn)}
+  .tag.confirmed,.tag.donated,.tag.fulfilled{background:#dbe9f5;color:#1b5a94}
+  .tag.rejected{background:#eee;color:#666}
+  .blood{font-weight:700;color:var(--blood)}
+  .empty{color:var(--muted);padding:14px 4px}
+  #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 18px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
+  #toast.show{opacity:1} #toast.err{background:var(--blood)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:20px} @media(max-width:800px){.two{grid-template-columns:1fr}}
+  .form{display:flex;flex-direction:column;gap:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Donor Match Registry</h1>
+  <p>Match blood and organ donors to waiting recipients by compatibility, urgency and distance.</p>
+  <div class="stats" id="stats"></div>
+  <nav id="tabs">
+    <button data-t="match" class="on">Find matches</button>
+    <button data-t="register">Register</button>
+    <button data-t="desk">Hospital desk</button>
+    <button data-t="registry">Registry</button>
+  </nav>
+</header>
+<main>
+
+<section id="match" class="on">
+  <div class="card">
+    <h2>Find donors for a recipient</h2>
+    <p class="hint">Only compatible, available donors are listed, nearest first. Locking reserves the donor until a hospital confirms or releases the match.</p>
+    <div class="row">
+      <label>Recipient <select id="m-recipient"></select></label>
+      <button class="btn" id="m-find">Find matches</button>
+    </div>
+  </div>
+  <div class="card" id="m-results" hidden></div>
+</section>
+
+<section id="register">
+  <div class="two">
+    <div class="card">
+      <h2>Register a donor</h2>
+      <p class="hint">Pick a city to fill in coordinates, or type your own.</p>
+      <div class="form" id="f-donor">
+        <label>Name <input name="name" required></label>
+        <label>Phone <input name="phone"></label>
+        <label>Blood type <select name="blood_type"></select></label>
+        <label>Donating <select name="organ_type"></select></label>
+        <label>City <select class="city"></select></label>
+        <div class="row"><label>Latitude <input name="latitude" type="number" step="any"></label>
+          <label>Longitude <input name="longitude" type="number" step="any"></label></div>
+        <button class="btn">Register donor</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Register a recipient</h2>
+      <p class="hint">Blood type is the type the recipient needs, not necessarily their own.</p>
+      <div class="form" id="f-recipient">
+        <label>Name <input name="name" required></label>
+        <label>Phone <input name="phone"></label>
+        <label>Blood type needed <select name="blood_type_needed"></select></label>
+        <label>Needs <select name="organ_needed"></select></label>
+        <label>Urgency <select name="urgency"><option>normal</option><option>high</option><option>critical</option></select></label>
+        <label>City <select class="city"></select></label>
+        <div class="row"><label>Latitude <input name="latitude" type="number" step="any"></label>
+          <label>Longitude <input name="longitude" type="number" step="any"></label></div>
+        <button class="btn">Register recipient</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="desk">
+  <div class="card">
+    <h2>Hospital desk</h2>
+    <p class="hint">Confirm a locked match once the donation is arranged, or release it to put the donor back in the pool.</p>
+    <div class="row"><label>Acting as <select id="h-user"></select></label></div>
+  </div>
+  <div class="card"><div class="wrap" id="h-table"></div></div>
+</section>
+
+<section id="registry">
+  <div class="card"><h2>Donors</h2><div class="wrap" id="r-donors"></div></div>
+  <div class="card"><h2>Recipients</h2><div class="wrap" id="r-recipients"></div></div>
+</section>
+
+</main>
+<div id="toast" role="status"></div>
+
+<script>
+const BLOOD = ["O-","O+","A-","A+","B-","B+","AB-","AB+"];
+const ORGANS = ["blood","kidney","liver","bone marrow"];
+const CITIES = {"Vellore":[12.9165,79.1325],"Chennai":[13.0827,80.2707],"Bengaluru":[12.9716,77.5946],
+  "Coimbatore":[11.0168,76.9558],"Madurai":[9.9252,78.1198],"Hyderabad":[17.385,78.4867],"Mumbai":[19.076,72.8777],"Delhi":[28.6139,77.209]};
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const tag = v => `<span class="tag ${esc(v)}">${esc(v)}</span>`;
+
+function toast(msg, err){ const t=$("#toast"); t.textContent=msg; t.className="show"+(err?" err":""); clearTimeout(t._h); t._h=setTimeout(()=>t.className="",3500); }
+
+async function api(path, method="GET", body){
+  const r = await fetch("/api"+path, {method, headers:{"Content-Type":"application/json"}, body: body?JSON.stringify(body):undefined});
+  const data = await r.json().catch(()=>({}));
+  if(!r.ok){ const d = data.detail; throw new Error(typeof d==="string" ? d : "Please check the form values"); }
+  return data;
+}
+
+function table(cols, rows, empty){
+  if(!rows.length) return `<div class="empty">${empty}</div>`;
+  return `<table><thead><tr>${cols.map(c=>`<th>${c[0]}</th>`).join("")}</tr></thead><tbody>${
+    rows.map(r=>`<tr>${cols.map(c=>`<td>${c[1](r)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+}
+
+/* ---- tabs ---- */
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on", x===b));
+  document.querySelectorAll("main section").forEach(s=>s.classList.toggle("on", s.id===b.dataset.t));
+  refresh();
+});
+
+/* ---- form setup ---- */
+function opts(arr){ return arr.map(v=>`<option>${v}</option>`).join(""); }
+document.querySelectorAll('select[name="blood_type"],select[name="blood_type_needed"]').forEach(s=>s.innerHTML=opts(BLOOD));
+document.querySelectorAll('select[name="organ_type"],select[name="organ_needed"]').forEach(s=>s.innerHTML=opts(ORGANS));
+document.querySelectorAll(".city").forEach(s=>{
+  s.innerHTML = "<option value=''>Choose a city</option>" + Object.keys(CITIES).map(c=>`<option>${c}</option>`).join("");
+  s.onchange = () => { const f=s.closest(".form"), c=CITIES[s.value]; if(c){ f.querySelector('[name=latitude]').value=c[0]; f.querySelector('[name=longitude]').value=c[1]; } };
+});
+
+function submitForm(formId, path, idKey, label){
+  const f = $(formId);
+  f.querySelector("button").onclick = async () => {
+    const body = {};
+    f.querySelectorAll("[name]").forEach(el => { if(el.value!=="") body[el.name] = el.type==="number" ? parseFloat(el.value) : el.value; });
+    try{
+      const res = await api(path, "POST", body);
+      toast(`${label} registered (ID ${res[idKey]})`);
+      f.querySelectorAll("input").forEach(i=>i.value=""); f.querySelector(".city").value="";
+      refresh();
+    }catch(e){ toast(e.message, true); }
+  };
+}
+submitForm("#f-donor", "/donors", "donor_id", "Donor");
+submitForm("#f-recipient", "/recipients", "recipient_id", "Recipient");
+
+/* ---- stats ---- */
+async function loadStats(){
+  const s = await api("/stats");
+  $("#stats").innerHTML = [
+    ["donors_available","donors available"],["donors_locked","donors locked"],["donors_donated","donated"],
+    ["recipients_waiting","recipients waiting"],["recipients_matched","matched"],["recipients_fulfilled","fulfilled"]
+  ].map(([k,l])=>`<div class="stat"><b>${s[k]}</b>${l}</div>`).join("");
+}
+
+/* ---- find matches ---- */
+let recipients = [];
+async function loadRecipientPicker(){
+  recipients = await api("/recipients");
+  const waiting = recipients.filter(r=>r.status==="waiting");
+  const cur = $("#m-recipient").value;
+  $("#m-recipient").innerHTML = waiting.length
+    ? waiting.map(r=>`<option value="${r.id}">#${r.id} ${esc(r.name)} needs ${r.blood_type_needed} ${esc(r.organ_needed)} (${r.urgency})</option>`).join("")
+    : "<option value=''>No recipients waiting</option>";
+  if(cur) $("#m-recipient").value = cur;
+}
+$("#m-find").onclick = findMatches;
+async function findMatches(){
+  const id = $("#m-recipient").value; if(!id) return;
+  const box = $("#m-results"); box.hidden = false;
+  try{
+    const res = await api(`/recipients/${id}/matches`);
+    box.innerHTML = `<h2>Compatible donors for recipient #${id} ${tag(res.urgency)}</h2><div class="wrap">` + table([
+      ["Donor", m=>`#${m.donor_id} ${esc(m.donor_name)}`],
+      ["Blood type", m=>`<span class="blood">${m.blood_type}</span>`],
+      ["Donating", m=>esc(m.organ_type)],
+      ["Distance", m=>`${m.distance_km} km`],
+      ["", m=>`<button class="btn" data-lock="${m.donor_id}">Lock donor</button>`]
+    ], res.matches, "No compatible, available donors right now. Register more donors or try again later.") + "</div>";
+    box.querySelectorAll("[data-lock]").forEach(b => b.onclick = () => lock(+b.dataset.lock, +id));
+  }catch(e){ toast(e.message, true); }
+}
+async function lock(donor_id, recipient_id){
+  try{
+    const r = await api("/matches/lock","POST",{donor_id, recipient_id});
+    toast(`Donor locked. Match #${r.match_id} is waiting for hospital confirmation.`);
+    $("#m-results").hidden = true; refresh();
+  }catch(e){ toast(e.message, true); findMatches(); loadStats(); }
+}
+
+/* ---- hospital desk ---- */
+async function loadDesk(){
+  const hs = await api("/hospitals"), cur = $("#h-user").value;
+  $("#h-user").innerHTML = hs.map(h=>`<option value="${h.id}">${esc(h.name)}</option>`).join("") || "<option value=''>No hospitals registered</option>";
+  if(cur) $("#h-user").value = cur;
+  const ms = await api("/matches");
+  $("#h-table").innerHTML = table([
+    ["Match", m=>`#${m.id}`],
+    ["Donor", m=>`${esc(m.donor_name)} <span class="blood">${m.donor_blood_type}</span>`],
+    ["Recipient", m=>`${esc(m.recipient_name)} ${tag(m.urgency)}`],
+    ["Status", m=>tag(m.status)],
+    ["Locked at", m=>m.locked_at ? new Date(m.locked_at+"Z").toLocaleString() : ""],
+    ["", m=> m.status==="locked"
+      ? `<button class="btn" data-act="confirm" data-id="${m.id}">Confirm</button> <button class="btn danger" data-act="reject" data-id="${m.id}">Release</button>` : (m.confirmed_by_name?`by ${esc(m.confirmed_by_name)}`:"")]
+  ], ms, "No matches yet. Lock a donor from the Find matches tab.");
+  document.querySelectorAll("[data-act]").forEach(b => b.onclick = async () => {
+    try{
+      await api(`/matches/${b.dataset.id}/${b.dataset.act}`, "POST", {hospital_user_id:+$("#h-user").value});
+      toast(b.dataset.act==="confirm" ? "Match confirmed" : "Match released, donor is available again");
+      refresh();
+    }catch(e){ toast(e.message, true); }
+  });
+}
+
+/* ---- registry ---- */
+async function loadRegistry(){
+  const [d, r] = await Promise.all([api("/donors"), api("/recipients")]);
+  $("#r-donors").innerHTML = table([
+    ["ID",x=>x.id],["Name",x=>esc(x.name)],["Blood",x=>`<span class="blood">${x.blood_type}</span>`],
+    ["Donating",x=>esc(x.organ_type)],["Location",x=>`${x.latitude.toFixed(2)}, ${x.longitude.toFixed(2)}`],["Status",x=>tag(x.status)]
+  ], d, "No donors yet.");
+  $("#r-recipients").innerHTML = table([
+    ["ID",x=>x.id],["Name",x=>esc(x.name)],["Needs",x=>`<span class="blood">${x.blood_type_needed}</span>`],
+    ["Organ",x=>esc(x.organ_needed)],["Urgency",x=>tag(x.urgency)],["Location",x=>`${x.latitude.toFixed(2)}, ${x.longitude.toFixed(2)}`],["Status",x=>tag(x.status)]
+  ], r, "No recipients yet.");
+}
+
+async function refresh(){
+  try{ await Promise.all([loadStats(), loadRecipientPicker(), loadDesk(), loadRegistry()]); }
+  catch(e){ toast("Cannot reach the server: "+e.message, true); }
+}
+refresh();
+</script>
+</body>
+</html>
