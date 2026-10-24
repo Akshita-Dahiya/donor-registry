@@ -50,6 +50,8 @@ To reset the demo: re-run `schema.sql` then `seed.sql`.
 
 All steps run in one transaction (`with transaction()`), so a crash halfway rolls everything back.
 
+![Register page](register-page.png)
+
 ## 5. Viva questions and answers
 
 **Why a lookup table instead of if/else or a graph database?** Compatibility is fixed and small (27 pairs). Storing it as rows turns "who can give to whom" into a normal JOIN, which is declarative, easy to change, and needs no Neo4j.
